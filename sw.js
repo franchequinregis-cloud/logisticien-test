@@ -1,5 +1,5 @@
-// #LOGISTICIEN — service worker de test (version test-1)
-const CACHE = 'logisticien-test-v1';
+// #LOGISTICIEN — service worker de test (version test-2)
+const CACHE = 'logisticien-test-v2';
 const FICHIERS = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {

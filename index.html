@@ -30,7 +30,7 @@
 <body>
 <header>
   <h1>#LOGISTICIEN</h1>
-  <p>Test technique — version test-1 (aucune donnée métier)</p>
+  <p>Test technique — version test-2 (aucune donnée métier)</p>
 </header>
 <main>
   <section>
@@ -56,8 +56,11 @@
 
   <section>
     <h2>4. Envoyer et importer un fichier</h2>
-    <button id="btn-partager">Partager un fichier test</button>
-    <label class="bouton" for="fichier">Importer un fichier</label>
+    <button id="btn-partager-texte">1. Partager du texte</button>
+    <button id="btn-partager-txt">2. Partager un fichier .txt</button>
+    <button id="btn-partager-json">3. Partager un fichier .json</button>
+    <button id="btn-telecharger" class="secondaire">4. Télécharger un fichier .json</button>
+    <label class="bouton" for="fichier">5. Importer un fichier</label>
     <input type="file" id="fichier" accept=".json,.txt,application/json,text/plain">
     <div class="etat" id="etat-partage"></div>
     <div class="etat" id="etat-import"></div>
@@ -90,8 +93,9 @@
     try {
       await navigator.serviceWorker.register('sw.js');
       var reg = await navigator.serviceWorker.ready;
-      var cache = await caches.has('logisticien-test-v1');
-      $('etat-sw').innerHTML = 'Service worker : ' + ok('actif') + ' — fichiers en cache : ' + (cache ? ok('oui') : ko('non')) +
+      var cle = (await caches.keys()).filter(function (k) { return k.indexOf('logisticien-test-') === 0; }).join(', ');
+      var cache = !!cle;
+      $('etat-sw').innerHTML = 'Service worker : ' + ok('actif') + ' — fichiers en cache : ' + (cache ? ok('oui (' + esc(cle) + ')') : ko('non')) +
         ' — page contrôlée : ' + (navigator.serviceWorker.controller ? ok('oui') : '<b>pas encore (recharge la page)</b>');
     } catch (e) {
       $('etat-sw').innerHTML = 'Service worker : ' + ko('erreur — ' + esc(e.message));
@@ -167,28 +171,39 @@
   function contenuTest() {
     return JSON.stringify({ format: 'logisticien-test', cree_le: new Date().toISOString(), message: 'Fichier de test du partage', lignes: ['article 1', 'article 2'] }, null, 2);
   }
-  $('btn-partager').addEventListener('click', async function () {
+  function detail(e) { return (e && e.name ? e.name : 'erreur') + (e && e.message ? ' — ' + e.message : ''); }
+  async function essai(libelle, donnees) {
     var zone = $('etat-partage');
-    if (!navigator.share) { zone.innerHTML = ko('Le menu Partager n\'est pas disponible ici.'); return; }
-    var variantes = [
-      { nom: 'logisticien-test.json', type: 'application/json', libelle: 'fichier .json' },
-      { nom: 'logisticien-test.txt', type: 'text/plain', libelle: 'fichier .txt (secours)' }
-    ];
-    var essais = [];
-    for (var i = 0; i < variantes.length; i++) {
-      var v = variantes[i];
-      var f = new File([contenuTest()], v.nom, { type: v.type });
-      if (!(navigator.canShare && navigator.canShare({ files: [f] }))) { essais.push(v.libelle + ' : refusé par Android'); continue; }
-      try {
-        await navigator.share({ files: [f], title: 'Test #LOGISTICIEN' });
-        zone.innerHTML = ok('Menu Partager ouvert avec un ' + v.libelle + '.') + (essais.length ? '<br>' + esc(essais.join(' ; ')) : '');
-        return;
-      } catch (e) {
-        if (e && e.name === 'AbortError') { zone.innerHTML = 'Partage annulé (' + v.libelle + ').'; return; }
-        essais.push(v.libelle + ' : erreur ' + (e && e.name ? e.name : ''));
-      }
+    if (!navigator.share) { zone.innerHTML = ko('navigator.share est absent.'); return; }
+    var activation = navigator.userActivation ? String(navigator.userActivation.isActive) : 'inconnu';
+    var peut = navigator.canShare ? String(navigator.canShare(donnees)) : 'canShare absent';
+    try {
+      await navigator.share(donnees);
+      zone.innerHTML = ok(libelle + ' : menu Partager ouvert.');
+    } catch (e) {
+      if (e && e.name === 'AbortError') { zone.innerHTML = libelle + ' : partage annulé (le menu s\'est bien ouvert).'; return; }
+      zone.innerHTML = ko(libelle + ' : échec') + '<br>' + esc(detail(e)) + '<br>canShare : ' + esc(peut) + ' — activation utilisateur : ' + esc(activation);
     }
-    zone.innerHTML = ko('Aucun partage possible.') + '<br>' + esc(essais.join(' ; '));
+  }
+  $('btn-partager-texte').addEventListener('click', function () {
+    essai('Texte', { title: 'Test #LOGISTICIEN', text: 'Test de partage #LOGISTICIEN' });
+  });
+  $('btn-partager-txt').addEventListener('click', function () {
+    essai('Fichier .txt', { files: [new File([contenuTest()], 'logisticien-test.txt', { type: 'text/plain' })] });
+  });
+  $('btn-partager-json').addEventListener('click', function () {
+    essai('Fichier .json', { files: [new File([contenuTest()], 'logisticien-test.json', { type: 'application/json' })] });
+  });
+  $('btn-telecharger').addEventListener('click', function () {
+    var blob = new Blob([contenuTest()], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'logisticien-test.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+    $('etat-partage').innerHTML = ok('Téléchargement lancé.') + ' Cherche « logisticien-test.json » dans le dossier Téléchargements du téléphone.';
   });
   function afficherFichier(zone, nom, taille, texte) {
     var verdict;
