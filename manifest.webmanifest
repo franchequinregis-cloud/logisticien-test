@@ -1,0 +1,27 @@
+{
+  "id": "./",
+  "name": "#LOGISTICIEN (test technique)",
+  "short_name": "LOGISTICIEN test",
+  "description": "Page de test : installation, mode hors connexion, données locales, partage de fichier.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#E8EDF1",
+  "theme_color": "#173653",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "share_target": {
+    "action": "./partage-recu",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        { "name": "fichier", "accept": ["application/json", ".json", "text/plain", ".txt"] }
+      ]
+    }
+  }
+}

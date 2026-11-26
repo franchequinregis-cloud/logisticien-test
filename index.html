@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#173653">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<title>#LOGISTICIEN — Test technique</title>
+<style>
+  :root { --fond:#E8EDF1; --nuit:#173653; --sport:#2878B8; --glace:#B9DDF0; --champagne:#B7A98A; --ok:#2e7d32; --ko:#c0392b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--fond); color:#1d2b36; }
+  header { background:var(--nuit); color:#fff; padding:18px 16px; }
+  header h1 { margin:0; font-size:1.4rem; color:var(--champagne); }
+  header p { margin:4px 0 0; font-size:.9rem; opacity:.9; }
+  main { padding:12px; max-width:640px; margin:0 auto; }
+  section { background:#fff; border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  h2 { margin:0 0 8px; font-size:1.05rem; color:var(--nuit); }
+  button, label.bouton { display:inline-block; background:var(--sport); color:#fff; border:0; border-radius:8px; padding:10px 14px; font-size:1rem; margin:4px 6px 4px 0; }
+  button.secondaire { background:var(--glace); color:var(--nuit); }
+  input[type=text] { width:100%; padding:10px; font-size:1rem; border:1px solid #b8c4cc; border-radius:8px; margin-bottom:6px; }
+  input[type=file] { display:none; }
+  .etat { font-size:.95rem; line-height:1.45; margin-top:6px; word-break:break-word; }
+  .ok { color:var(--ok); font-weight:600; } .ko { color:var(--ko); font-weight:600; }
+  ul { padding-left:18px; margin:6px 0 0; } li { margin-bottom:2px; }
+  pre { background:#f3f6f8; padding:8px; border-radius:8px; overflow:auto; max-height:180px; font-size:.8rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>#LOGISTICIEN</h1>
+  <p>Test technique — version test-1 (aucune donnée métier)</p>
+</header>
+<main>
+  <section>
+    <h2>1. Installation et réseau</h2>
+    <div class="etat" id="etat-install">…</div>
+    <div class="etat" id="etat-sw">…</div>
+    <div class="etat" id="etat-reseau">…</div>
+  </section>
+
+  <section>
+    <h2>2. Stockage</h2>
+    <button id="btn-persist">Demander le stockage persistant</button>
+    <div class="etat" id="etat-stockage">…</div>
+  </section>
+
+  <section>
+    <h2>3. Données locales</h2>
+    <input type="text" id="champ-note" placeholder="Écris une note de test">
+    <button id="btn-ajouter">Ajouter la note</button>
+    <button id="btn-effacer" class="secondaire">Tout effacer</button>
+    <div class="etat" id="etat-notes">…</div>
+  </section>
+
+  <section>
+    <h2>4. Envoyer et importer un fichier</h2>
+    <button id="btn-partager">Partager un fichier test</button>
+    <label class="bouton" for="fichier">Importer un fichier</label>
+    <input type="file" id="fichier" accept=".json,.txt,application/json,text/plain">
+    <div class="etat" id="etat-partage"></div>
+    <div class="etat" id="etat-import"></div>
+  </section>
+
+  <section id="section-recu" hidden>
+    <h2>5. Fichier reçu par le menu Partager</h2>
+    <div class="etat" id="etat-recu"></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function ok(t) { return '<span class="ok">' + t + '</span>'; }
+  function ko(t) { return '<span class="ko">' + t + '</span>'; }
+
+  // 1. Installation, service worker, réseau
+  function majInstall() {
+    var autonome = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    $('etat-install').innerHTML = 'Mode d\'affichage : ' + (autonome ? ok('application installée (mode autonome)') : '<b>navigateur (non installée)</b>');
+  }
+  function majReseau() {
+    $('etat-reseau').innerHTML = 'Réseau : ' + (navigator.onLine ? ok('connecté') : ko('hors connexion'));
+  }
+  async function majSW() {
+    if (!('serviceWorker' in navigator)) { $('etat-sw').innerHTML = 'Service worker : ' + ko('non disponible'); return; }
+    try {
+      await navigator.serviceWorker.register('sw.js');
+      var reg = await navigator.serviceWorker.ready;
+      var cache = await caches.has('logisticien-test-v1');
+      $('etat-sw').innerHTML = 'Service worker : ' + ok('actif') + ' — fichiers en cache : ' + (cache ? ok('oui') : ko('non')) +
+        ' — page contrôlée : ' + (navigator.serviceWorker.controller ? ok('oui') : '<b>pas encore (recharge la page)</b>');
+    } catch (e) {
+      $('etat-sw').innerHTML = 'Service worker : ' + ko('erreur — ' + esc(e.message));
+    }
+  }
+  window.addEventListener('online', majReseau);
+  window.addEventListener('offline', majReseau);
+
+  // 2. Stockage persistant
+  async function majStockage() {
+    var t = '';
+    if (navigator.storage && navigator.storage.persisted) {
+      var p = await navigator.storage.persisted();
+      t += 'Stockage persistant : ' + (p ? ok('accordé') : '<b>non accordé</b>') + '<br>';
+    } else { t += 'Stockage persistant : ' + ko('non disponible') + '<br>'; }
+    if (navigator.storage && navigator.storage.estimate) {
+      var e = await navigator.storage.estimate();
+      t += 'Utilisé : ' + (e.usage / 1024).toFixed(0) + ' Ko — quota : ' + (e.quota / 1048576).toFixed(0) + ' Mo';
+    }
+    $('etat-stockage').innerHTML = t;
+  }
+  $('btn-persist').addEventListener('click', async function () {
+    try {
+      var r = navigator.storage && navigator.storage.persist ? await navigator.storage.persist() : false;
+      await majStockage();
+      $('etat-stockage').innerHTML += '<br>Réponse à la demande : ' + (r ? ok('accordé') : ko('refusé'));
+    } catch (e) { $('etat-stockage').innerHTML = ko('erreur — ' + esc(e.message)); }
+  });
+
+  // 3. Données locales (IndexedDB)
+  function ouvrirBase() {
+    return new Promise(function (resolve, reject) {
+      var r = indexedDB.open('logisticien-test', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('notes', { keyPath: 'id', autoIncrement: true }); };
+      r.onsuccess = function () { resolve(r.result); };
+      r.onerror = function () { reject(r.error); };
+    });
+  }
+  function fin(t) {
+    return new Promise(function (resolve, reject) { t.oncomplete = resolve; t.onerror = function () { reject(t.error); }; t.onabort = function () { reject(t.error); }; });
+  }
+  async function afficherNotes() {
+    try {
+      var db = await ouvrirBase();
+      var req = db.transaction('notes').objectStore('notes').getAll();
+      var notes = await new Promise(function (res, rej) { req.onsuccess = function () { res(req.result); }; req.onerror = function () { rej(req.error); }; });
+      var h = 'Notes enregistrées : <b>' + notes.length + '</b>';
+      if (notes.length) h += '<ul>' + notes.map(function (n) { return '<li>' + esc(n.texte) + ' <small>(' + esc(n.date.slice(0, 19).replace('T', ' ')) + ')</small></li>'; }).join('') + '</ul>';
+      $('etat-notes').innerHTML = h;
+    } catch (e) { $('etat-notes').innerHTML = ko('erreur — ' + esc(e.message)); }
+  }
+  $('btn-ajouter').addEventListener('click', async function () {
+    try {
+      var db = await ouvrirBase();
+      var t = db.transaction('notes', 'readwrite');
+      t.objectStore('notes').add({ date: new Date().toISOString(), texte: $('champ-note').value || '(sans texte)' });
+      await fin(t);
+      $('champ-note').value = '';
+      afficherNotes();
+    } catch (e) { $('etat-notes').innerHTML = ko('erreur — ' + esc(e.message)); }
+  });
+  $('btn-effacer').addEventListener('click', async function () {
+    try {
+      var db = await ouvrirBase();
+      var t = db.transaction('notes', 'readwrite');
+      t.objectStore('notes').clear();
+      await fin(t);
+      afficherNotes();
+    } catch (e) { $('etat-notes').innerHTML = ko('erreur — ' + esc(e.message)); }
+  });
+
+  // 4. Partage et import de fichier
+  function contenuTest() {
+    return JSON.stringify({ format: 'logisticien-test', cree_le: new Date().toISOString(), message: 'Fichier de test du partage', lignes: ['article 1', 'article 2'] }, null, 2);
+  }
+  $('btn-partager').addEventListener('click', async function () {
+    var zone = $('etat-partage');
+    if (!navigator.share) { zone.innerHTML = ko('Le menu Partager n\'est pas disponible ici.'); return; }
+    var variantes = [
+      { nom: 'logisticien-test.json', type: 'application/json', libelle: 'fichier .json' },
+      { nom: 'logisticien-test.txt', type: 'text/plain', libelle: 'fichier .txt (secours)' }
+    ];
+    var essais = [];
+    for (var i = 0; i < variantes.length; i++) {
+      var v = variantes[i];
+      var f = new File([contenuTest()], v.nom, { type: v.type });
+      if (!(navigator.canShare && navigator.canShare({ files: [f] }))) { essais.push(v.libelle + ' : refusé par Android'); continue; }
+      try {
+        await navigator.share({ files: [f], title: 'Test #LOGISTICIEN' });
+        zone.innerHTML = ok('Menu Partager ouvert avec un ' + v.libelle + '.') + (essais.length ? '<br>' + esc(essais.join(' ; ')) : '');
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') { zone.innerHTML = 'Partage annulé (' + v.libelle + ').'; return; }
+        essais.push(v.libelle + ' : erreur ' + (e && e.name ? e.name : ''));
+      }
+    }
+    zone.innerHTML = ko('Aucun partage possible.') + '<br>' + esc(essais.join(' ; '));
+  });
+  function afficherFichier(zone, nom, taille, texte) {
+    var verdict;
+    try { var o = JSON.parse(texte); verdict = ok('JSON valide') + (o && o.format ? ' — format : ' + esc(o.format) : ''); }
+    catch (e) { verdict = ko('JSON non valide') + ' — ' + esc(e.message); }
+    zone.innerHTML = 'Fichier : <b>' + esc(nom) + '</b> (' + taille + ' octets)<br>' + verdict + '<pre>' + esc(texte.slice(0, 600)) + '</pre>';
+  }
+  $('fichier').addEventListener('change', async function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    try { afficherFichier($('etat-import'), f.name, f.size, await f.text()); }
+    catch (err) { $('etat-import').innerHTML = ko('Lecture impossible — ' + esc(err.message)); }
+    e.target.value = '';
+  });
+
+  // 5. Fichier reçu via le menu Partager (share target)
+  async function afficherRecu() {
+    if (location.search.indexOf('recu=1') === -1) return;
+    $('section-recu').hidden = false;
+    try {
+      var c = await caches.open('recu-test');
+      var r = await c.match('recu.json');
+      if (!r) { $('etat-recu').innerHTML = ko('Rien trouvé.'); return; }
+      var d = await r.json();
+      if (d.erreur) { $('etat-recu').innerHTML = ko('Erreur : ' + esc(d.erreur)); return; }
+      afficherFichier($('etat-recu'), d.nom + ' [' + d.type + ']', d.taille, d.texte);
+      history.replaceState(null, '', location.pathname);
+    } catch (e) { $('etat-recu').innerHTML = ko('Erreur — ' + esc(e.message)); }
+  }
+
+  majInstall(); majReseau(); majSW(); majStockage(); afficherNotes(); afficherRecu();
+})();
+</script>
+</body>
+</html>
